@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Blessed">
+  <meta name="theme-color" content="#FFFFFF">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <title>Blessed</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { font-family: -apple-system, 'SF Pro Display', system-ui, sans-serif; background: #fff; color: #000; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
+    textarea, input { -webkit-user-select: text; user-select: text; }
+    .app { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+    .content { flex: 1; overflow-y: auto; padding-bottom: 90px; }
+    .screen { display: none; padding: 0 20px; padding-top: max(32px, env(safe-area-inset-top)); max-width: 480px; margin: 0 auto; width: 100%; }
+    .screen.active { display: block; }
+
+    /* Nav */
+    .nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; border-top: 1px solid #E5E7EB; background: #fff; padding-bottom: max(12px, env(safe-area-inset-bottom)); z-index: 40; }
+    .nav button { flex: 1; display: flex; flex-direction: column; align-items: center; padding-top: 10px; border: none; background: none; color: #9CA3AF; font-size: 10px; font-weight: 600; font-family: inherit; }
+    .nav button.active { color: #000; }
+    .nav button svg { margin-bottom: 3px; }
+
+    /* Date nav */
+    .date-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+    .date-nav h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; text-align: center; }
+    .streak { font-size: 14px; color: #6B7280; margin-top: 2px; }
+    .back-link { font-size: 12px; color: #6B7280; text-decoration: underline; border: none; background: none; font-family: inherit; margin-top: 2px; }
+    .arrow-btn { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid #E5E7EB; background: #fff; flex-shrink: 0; }
+    .arrow-btn:disabled { opacity: 0.3; }
+
+    /* Mood */
+    .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6B7280; margin-bottom: 4px; }
+    .mood-row { display: flex; justify-content: center; gap: 16px; padding: 16px 0; }
+    .mood-btn { border: none; background: none; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: all 0.2s; font-family: inherit; }
+    .mood-btn span.emoji { font-size: 30px; transition: font-size 0.2s; }
+    .mood-btn.selected span.emoji { font-size: 38px; }
+    .mood-btn.dimmed { opacity: 0.25; }
+    .mood-btn .mood-text { font-size: 11px; font-weight: 600; }
+
+    /* Cards */
+    .card { background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+    .card .card-inner { display: flex; align-items: flex-start; gap: 12px; }
+    .card .card-content { flex: 1; }
+    .card label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6B7280; display: block; }
+    .card textarea, .card input[type="text"] { width: 100%; margin-top: 6px; border: none; background: transparent; resize: none; outline: none; font-size: 16px; line-height: 1.5; font-family: inherit; color: #000; }
+    .card textarea::placeholder, .card input::placeholder { color: #D1D5DB; }
+
+    /* Mic button */
+    .mic-btn { width: 44px; height: 44px; border-radius: 50%; border: 1px solid #E5E7EB; background: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 20px; position: relative; }
+    .mic-btn.recording { border-color: #EF4444; background: #FEF2F2; }
+    .mic-btn.recording::before { content: ''; position: absolute; width: 28px; height: 28px; border-radius: 50%; background: rgba(239,68,68,0.3); animation: pulse 1.2s ease-out infinite; }
+    @keyframes pulse { 0% { transform: scale(0.8); opacity: 0.5; } 100% { transform: scale(1.5); opacity: 0; } }
+
+    /* Buttons */
+    .save-btn { width: 100%; padding: 14px; border-radius: 12px; border: none; font-size: 16px; font-weight: 700; font-family: inherit; margin-top: 8px; }
+    .save-btn.enabled { background: #000; color: #fff; }
+    .save-btn.disabled { background: #E5E7EB; color: #9CA3AF; }
+    .backup-btn { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #E5E7EB; background: #fff; font-size: 14px; font-weight: 600; font-family: inherit; color: #6B7280; margin-top: 8px; margin-bottom: 24px; }
+
+    /* Calendar */
+    .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+    .cal-header h2 { font-size: 18px; font-weight: 700; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+    .cal-day-label { text-align: center; font-size: 12px; font-weight: 600; color: #6B7280; padding: 4px; }
+    .cal-day { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 0; border-radius: 8px; border: 1px solid transparent; background: none; font-size: 14px; font-weight: 500; font-family: inherit; color: #000; }
+    .cal-day.today:not(.selected) { border-color: #E5E7EB; }
+    .cal-day.selected { background: #000 !important; color: #fff !important; }
+    .cal-day.future { color: #D1D5DB; }
+
+    /* Day detail */
+    .day-detail { margin-top: 16px; background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+    .detail-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .detail-left { display: flex; align-items: center; gap: 8px; }
+    .detail-left .emoji { font-size: 24px; }
+    .detail-left .date { font-size: 14px; font-weight: 600; }
+    .edit-btn, .add-btn { font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid #E5E7EB; background: none; font-family: inherit; }
+    .edit-btn { color: #6B7280; }
+    .add-btn { color: #000; margin-top: 8px; }
+    .detail-item { display: flex; gap: 8px; margin-bottom: 8px; }
+    .detail-item .num { font-size: 12px; color: #6B7280; margin-top: 2px; }
+    .detail-item .text { font-size: 14px; line-height: 1.5; }
+    .detail-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #E5E7EB; }
+    .detail-section .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6B7280; margin-bottom: 4px; }
+    .detail-section .section-text { font-size: 14px; line-height: 1.5; }
+    .no-entry { text-align: center; color: #6B7280; font-size: 14px; padding: 20px; }
+
+    /* Settings */
+    .page-title { font-size: 24px; font-weight: 700; margin-bottom: 24px; }
+    .settings-card { background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+    .settings-card .card-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+    .settings-card .card-text { font-size: 14px; color: #6B7280; }
+    .settings-card .card-small { font-size: 12px; color: #9CA3AF; line-height: 1.5; }
+    .settings-card .card-label { font-size: 12px; font-weight: 600; color: #6B7280; margin-bottom: 8px; }
+    .settings-card input[type="email"] { width: 100%; padding: 10px 12px; border: 1px solid #E5E7EB; border-radius: 8px; font-size: 16px; font-family: inherit; outline: none; background: #fff; -webkit-user-select: text; user-select: text; }
+    .settings-card input[type="email"]:focus { border-color: #000; }
+    .settings-card .save-email-btn { margin-top: 8px; padding: 8px 16px; border-radius: 8px; border: 1px solid #E5E7EB; background: #000; color: #fff; font-size: 13px; font-weight: 600; font-family: inherit; }
+    .export-btn { width: 100%; padding: 14px; border-radius: 12px; border: 1px solid #E5E7EB; background: #fff; font-size: 14px; font-weight: 700; font-family: inherit; margin-bottom: 12px; }
+    .delete-btn { width: 100%; padding: 14px; border-radius: 12px; border: 1px solid #FECACA; background: #fff; font-size: 14px; font-weight: 700; font-family: inherit; color: #EF4444; margin-bottom: 24px; }
+
+    /* Stats */
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .stat-box { background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; }
+    .stat-box .stat-value { font-size: 28px; font-weight: 800; }
+    .stat-box .stat-label { font-size: 12px; color: #6B7280; margin-top: 2px; }
+    .stat-wide { grid-column: 1 / -1; }
+    .chart-card { background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+    .chart-card .chart-title { font-size: 14px; font-weight: 700; margin-bottom: 16px; }
+    .pie-container { display: flex; align-items: center; justify-content: center; gap: 24px; }
+    .pie-legend { display: flex; flex-direction: column; gap: 6px; }
+    .pie-legend-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+    .pie-legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .bar-label { width: 28px; font-size: 12px; font-weight: 600; color: #6B7280; text-align: right; flex-shrink: 0; }
+    .bar-track { flex: 1; height: 24px; background: #E5E7EB; border-radius: 6px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 6px; transition: width 0.3s; }
+    .bar-value { width: 24px; font-size: 12px; color: #6B7280; flex-shrink: 0; }
+
+    /* Toast */
+    .toast { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); background: #000; color: #fff; font-size: 14px; padding: 10px 16px; border-radius: 999px; z-index: 50; animation: fadeUp 0.2s ease; white-space: nowrap; }
+    @keyframes fadeUp { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="content">
+      <div id="screen-today" class="screen active"></div>
+      <div id="screen-calendar" class="screen"></div>
+      <div id="screen-stats" class="screen"></div>
+      <div id="screen-settings" class="screen"></div>
+    </div>
+    <div class="nav">
+      <button class="active" data-tab="today">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+        Vandaag
+      </button>
+      <button data-tab="calendar">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Kalender
+      </button>
+      <button data-tab="stats">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-14"/></svg>
+        Stats
+      </button>
+      <button data-tab="settings">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        Instellingen
+      </button>
+    </div>
+  </div>
+  <div id="toast" class="toast" style="display:none"></div>
+
+  <script>
+    // ─── Constants ───
+    const MOODS = [
+      { emoji: "😢", label: "Awful", color: "#EF4444", bg: "#FEF2F2" },
+      { emoji: "😕", label: "Bad", color: "#F97316", bg: "#FFF7ED" },
+      { emoji: "😐", label: "Okay", color: "#EAB308", bg: "#FEFCE8" },
+      { emoji: "😊", label: "Good", color: "#84CC16", bg: "#F7FEE7" },
+      { emoji: "😄", label: "Great", color: "#22C55E", bg: "#F0FDF4" },
+    ];
+    const DAY_LABELS = ["Ma","Di","Wo","Do","Vr","Za","Zo"];
+    const DAY_NAMES_SHORT = ["Zo","Ma","Di","Wo","Do","Vr","Za"];
+    const MONTHS = ["Januari","Februari","Maart","April","Mei","Juni","Juli","Augustus","September","Oktober","November","December"];
+    const WEEKDAYS = ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"];
+
+    // ─── State ───
+    let entries = {};
+    let editingDate = new Date();
+    let mood = null;
+    let gratitude = ["", "", ""];
+    let onMind = "";
+    let calYear = new Date().getFullYear();
+    let calMonth = new Date().getMonth();
+    let selectedDay = null;
+    let currentTab = "today";
+    let backupEmail = localStorage.getItem("blessed-email") || "";
+
+    // ─── IndexedDB ───
+    const DB = "blessed-journal", ST = "entries";
+    function openDB() { return new Promise((res, rej) => { const r = indexedDB.open(DB, 1); r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains(ST)) r.result.createObjectStore(ST); }; r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
+    async function dbSet(k, v) { const db = await openDB(); return new Promise((res, rej) => { const tx = db.transaction(ST, "readwrite"); tx.objectStore(ST).put(v, k); tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); }); }
+    async function dbGetAll() { const db = await openDB(); return new Promise((res, rej) => { const tx = db.transaction(ST, "readonly"); const s = tx.objectStore(ST); const keys = s.getAllKeys(); const vals = s.getAll(); tx.oncomplete = () => { const r = {}; keys.result.forEach((k, i) => r[k] = vals.result[i]); res(r); }; tx.onerror = () => rej(tx.error); }); }
+    async function dbClear() { const db = await openDB(); return new Promise((res, rej) => { const tx = db.transaction(ST, "readwrite"); tx.objectStore(ST).clear(); tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); }); }
+
+    // ─── Helpers ───
+    function toKey(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+    function fmtDate(d) { return `${WEEKDAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`; }
+    function sameDay(a, b) { return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+    function isToday() { return sameDay(editingDate, new Date()); }
+    function getStreak() { let s = 0, d = new Date(); if (!entries[toKey(d)]) d.setDate(d.getDate()-1); while (entries[toKey(d)]) { s++; d.setDate(d.getDate()-1); } return s; }
+    function getLongestStreak() { const sorted = Object.keys(entries).sort(); if (!sorted.length) return 0; let max = 1, cur = 1; for (let i = 1; i < sorted.length; i++) { const prev = new Date(sorted[i-1]+"T00:00:00"); const next = new Date(sorted[i]+"T00:00:00"); const diff = (next - prev) / 86400000; if (diff === 1) { cur++; if (cur > max) max = cur; } else { cur = 1; } } return max; }
+    function showToast(msg) { const t = document.getElementById("toast"); t.textContent = msg; t.style.display = "block"; clearTimeout(t._tid); t._tid = setTimeout(() => t.style.display = "none", 2500); }
+
+    // ─── Speech ───
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let activeRec = null, activeField = null;
+
+    function toggleSpeech(field) {
+      if (activeRec && activeField === field) { activeRec.stop(); activeRec = null; activeField = null; renderToday(); return; }
+      if (activeRec) { activeRec.stop(); activeRec = null; }
+      if (!SpeechRec) { showToast("Spraakherkenning niet beschikbaar"); return; }
+      try {
+        const rec = new SpeechRec(); rec.continuous = false; rec.interimResults = false; rec.lang = "nl-NL";
+        rec.onresult = (e) => {
+          const txt = e.results[0][0].transcript;
+          if (field === "mind") { onMind = onMind ? onMind + " " + txt : txt; }
+          else { gratitude[field] = gratitude[field] ? gratitude[field] + " " + txt : txt; }
+          activeRec = null; activeField = null; renderToday();
+        };
+        rec.onerror = (e) => { activeRec = null; activeField = null; if (e.error === "not-allowed") showToast("Microfoon toegang geweigerd"); else if (e.error === "no-speech") showToast("Geen spraak gedetecteerd"); renderToday(); };
+        rec.onend = () => { if (activeRec) { activeRec = null; activeField = null; renderToday(); } };
+        rec.start(); activeRec = rec; activeField = field; renderToday();
+      } catch(e) { showToast("Spraakherkenning niet beschikbaar"); }
+    }
+
+    function micHTML(field) {
+      const isRec = activeField === field;
+      return `<button class="mic-btn ${isRec ? "recording" : ""}" onclick="toggleSpeech(${typeof field === 'string' ? "'"+field+"'" : field})">
+        ${isRec
+          ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="#EF4444"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`
+          : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`}
+      </button>`;
+    }
+
+    // ─── Email backup ───
+    function sendBackup() {
+      if (!backupEmail) { showToast("Stel eerst je email in bij Instellingen"); return; }
+      const sorted = Object.keys(entries).sort();
+      let body = "Blessed Journal Backup\n\n";
+      sorted.forEach(k => {
+        const e = entries[k];
+        body += `${e.date} — ${MOODS[e.mood]?.emoji || "?"}\n`;
+        if (e.onMind) body += `Bezig met: ${e.onMind}\n`;
+        e.gratitude.forEach((g, i) => { if (g) body += `  ${i+1}. ${g}\n`; });
+        body += "\n";
+      });
+      const subject = `Blessed Backup — ${new Date().toLocaleDateString("nl-NL")}`;
+      const mailto = `mailto:${backupEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.location.href = mailto;
+      showToast("Mail app geopend");
+    }
+
+    // ─── Render: Today ───
+    function renderToday() {
+      const streak = getStreak();
+      const today = isToday();
+      const hasContent = mood !== null || gratitude.some(g => g.trim()) || onMind.trim();
+      const existing = entries[toKey(editingDate)];
+
+      let html = `<div class="date-nav">
+        <button class="arrow-btn" onclick="prevDay()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <div style="text-align:center">
+          <h1>${fmtDate(editingDate)}</h1>
+          ${today && streak > 0 ? `<div class="streak">🔥 ${streak} dagen streak</div>` : ""}
+          ${!today ? `<button class="back-link" onclick="goToday()">Terug naar vandaag</button>` : ""}
+        </div>
+        <button class="arrow-btn" onclick="nextDay()" ${today ? "disabled" : ""}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg></button>
+      </div>`;
+
+      // Mood
+      html += `<div class="section-label">Hoe voel je je?</div><div class="mood-row">`;
+      MOODS.forEach((m, i) => {
+        const sel = mood === i; const dim = mood !== null && !sel;
+        html += `<button class="mood-btn ${sel?"selected":""} ${dim?"dimmed":""}" onclick="setMood(${i})"><span class="emoji">${m.emoji}</span>${sel ? `<span class="mood-text" style="color:${m.color}">${m.label}</span>` : ""}</button>`;
+      });
+      html += `</div>`;
+
+      // On my mind
+      html += `<div class="card"><div class="card-inner"><div class="card-content">
+        <label>Wat houdt je bezig?</label>
+        <textarea rows="2" placeholder="Wat speelt er vandaag?" oninput="onMind=this.value">${onMind || ""}</textarea>
+      </div>${micHTML("mind")}</div></div>`;
+
+      // Gratitude
+      html += `<div class="section-label" style="margin-top:8px; margin-bottom:8px">Dankbaarheid</div>`;
+      for (let i = 0; i < 3; i++) {
+        html += `<div class="card"><div class="card-inner"><div class="card-content">
+          <label>Dankbaar voor #${i+1}</label>
+          <textarea rows="2" placeholder="Waar ben je dankbaar voor?" oninput="setGratitude(${i}, this.value)">${gratitude[i] || ""}</textarea>
+        </div>${micHTML(i)}</div></div>`;
+      }
+
+      // Save + Backup
+      html += `<button class="save-btn ${hasContent?"enabled":"disabled"}" onclick="saveEntry()" ${hasContent?"":"disabled"}>${existing ? "Bijwerken" : "Opslaan"}</button>`;
+      html += `<button class="backup-btn" onclick="saveAndBackup()">💾 Opslaan & backup versturen</button>`;
+
+      document.getElementById("screen-today").innerHTML = html;
+    }
+
+    // ─── Render: Calendar ───
+    function renderCalendar() {
+      const first = new Date(calYear, calMonth, 1);
+      let startDow = first.getDay() - 1; if (startDow < 0) startDow = 6;
+      const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+      const today = new Date();
+
+      let html = `<div class="cal-header">
+        <button class="arrow-btn" onclick="calPrev()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <h2>${MONTHS[calMonth]} ${calYear}</h2>
+        <button class="arrow-btn" onclick="calNext()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg></button>
+      </div><div class="cal-grid">`;
+      DAY_LABELS.forEach(d => html += `<div class="cal-day-label">${d}</div>`);
+      for (let i = 0; i < startDow; i++) html += `<div></div>`;
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const date = new Date(calYear, calMonth, d);
+        const key = toKey(date); const entry = entries[key];
+        const isTod = sameDay(date, today), isSel = selectedDay && sameDay(date, selectedDay), isFut = date > today;
+        const bg = entry && !isSel ? MOODS[entry.mood]?.bg || "" : "";
+        const cls = `cal-day ${isTod?"today":""} ${isSel?"selected":""} ${isFut?"future":""}`;
+        html += `<button class="${cls}" style="${bg && !isSel ? "background:"+bg : ""}" onclick="selectCalDay(${calYear},${calMonth},${d})" ${isFut?"disabled":""}>${d}</button>`;
+      }
+      html += `</div>`;
+
+      if (selectedDay) {
+        const key = toKey(selectedDay); const entry = entries[key];
+        if (entry) {
+          html += `<div class="day-detail"><div class="detail-header"><div class="detail-left"><span class="emoji">${MOODS[entry.mood]?.emoji||""}</span><span class="date">${fmtDate(selectedDay)}</span></div><button class="edit-btn" onclick="editDay(${selectedDay.getFullYear()},${selectedDay.getMonth()},${selectedDay.getDate()})">Bewerken</button></div>`;
+          if (entry.onMind) html += `<div class="detail-section"><div class="section-title">Bezig met</div><div class="section-text">${entry.onMind}</div></div>`;
+          html += `<div class="detail-section"><div class="section-title">Dankbaar voor</div>`;
+          entry.gratitude.forEach((g, i) => html += `<div class="detail-item"><span class="num">${i+1}.</span><span class="text">${g || '<span style="color:#D1D5DB">—</span>'}</span></div>`);
+          html += `</div></div>`;
+        } else {
+          html += `<div class="day-detail"><div class="no-entry">Geen notitie voor deze dag<br><button class="add-btn" onclick="editDay(${selectedDay.getFullYear()},${selectedDay.getMonth()},${selectedDay.getDate()})">+ Toevoegen</button></div></div>`;
+        }
+      }
+      document.getElementById("screen-calendar").innerHTML = html;
+    }
+
+    // ─── Render: Stats ───
+    function renderStats() {
+      const all = Object.values(entries);
+      const count = all.length;
+      if (count === 0) {
+        document.getElementById("screen-stats").innerHTML = `<div class="page-title">Statistieken</div><div class="no-entry" style="padding:40px 0">Nog geen data. Begin met je eerste notitie!</div>`;
+        return;
+      }
+
+      const streak = getStreak();
+      const longest = getLongestStreak();
+      const avgMood = (all.reduce((s, e) => s + (e.mood || 0), 0) / count).toFixed(1);
+
+      // Mood distribution
+      const moodCounts = [0,0,0,0,0];
+      all.forEach(e => { if (e.mood != null) moodCounts[e.mood]++; });
+
+      // Day of week distribution
+      const dowCounts = [0,0,0,0,0,0,0];
+      all.forEach(e => { const d = new Date(e.date+"T00:00:00"); dowCounts[d.getDay()]++; });
+      const bestDow = dowCounts.indexOf(Math.max(...dowCounts));
+
+      // Mood over last 14 days
+      const last14 = [];
+      for (let i = 13; i >= 0; i--) {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        const entry = entries[toKey(d)];
+        last14.push({ date: d, mood: entry ? entry.mood : null });
+      }
+
+      let html = `<div class="page-title">Statistieken</div>`;
+
+      // Stat boxes
+      html += `<div class="stat-grid">
+        <div class="stat-box"><div class="stat-value">${count}</div><div class="stat-label">Notities</div></div>
+        <div class="stat-box"><div class="stat-value">${avgMood}</div><div class="stat-label">Gem. mood (0-4)</div></div>
+        <div class="stat-box"><div class="stat-value">🔥 ${streak}</div><div class="stat-label">Huidige streak</div></div>
+        <div class="stat-box"><div class="stat-value">⭐ ${longest}</div><div class="stat-label">Langste streak</div></div>
+      </div>`;
+
+      // Pie chart
+      const total = moodCounts.reduce((a,b) => a+b, 0);
+      if (total > 0) {
+        html += `<div class="chart-card"><div class="chart-title">Mood verdeling</div><div class="pie-container">`;
+        // SVG pie
+        let cumAngle = 0;
+        html += `<svg width="120" height="120" viewBox="0 0 120 120">`;
+        moodCounts.forEach((c, i) => {
+          if (c === 0) return;
+          const pct = c / total;
+          const angle = pct * 360;
+          const startAngle = cumAngle;
+          const endAngle = cumAngle + angle;
+          const largeArc = angle > 180 ? 1 : 0;
+          const x1 = 60 + 55 * Math.cos((startAngle - 90) * Math.PI / 180);
+          const y1 = 60 + 55 * Math.sin((startAngle - 90) * Math.PI / 180);
+          const x2 = 60 + 55 * Math.cos((endAngle - 90) * Math.PI / 180);
+          const y2 = 60 + 55 * Math.sin((endAngle - 90) * Math.PI / 180);
+          if (total === c) {
+            html += `<circle cx="60" cy="60" r="55" fill="${MOODS[i].color}"/>`;
+          } else {
+            html += `<path d="M60,60 L${x1},${y1} A55,55 0 ${largeArc},1 ${x2},${y2} Z" fill="${MOODS[i].color}"/>`;
+          }
+          cumAngle += angle;
+        });
+        html += `</svg>`;
+        // Legend
+        html += `<div class="pie-legend">`;
+        moodCounts.forEach((c, i) => {
+          if (c === 0) return;
+          html += `<div class="pie-legend-item"><div class="pie-legend-dot" style="background:${MOODS[i].color}"></div>${MOODS[i].emoji} ${c}x (${Math.round(c/total*100)}%)</div>`;
+        });
+        html += `</div></div></div>`;
+      }
+
+      // Mood trend (last 14 days as bars)
+      html += `<div class="chart-card"><div class="chart-title">Mood afgelopen 2 weken</div>`;
+      last14.forEach(item => {
+        const dayLabel = String(item.date.getDate()).padStart(2," ");
+        if (item.mood !== null) {
+          const pct = ((item.mood + 1) / 5) * 100;
+          html += `<div class="bar-row"><div class="bar-label">${dayLabel}</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${MOODS[item.mood].color}"></div></div><div class="bar-value">${MOODS[item.mood].emoji}</div></div>`;
+        } else {
+          html += `<div class="bar-row"><div class="bar-label">${dayLabel}</div><div class="bar-track"></div><div class="bar-value" style="color:#D1D5DB">-</div></div>`;
+        }
+      });
+      html += `</div>`;
+
+      // Most active day
+      html += `<div class="chart-card"><div class="chart-title">Meest actieve dag</div>`;
+      const maxDow = Math.max(...dowCounts);
+      DAY_LABELS.forEach((d, i) => {
+        const di = (i + 1) % 7; // Ma=1, Di=2 ... Zo=0
+        const c = dowCounts[di];
+        const pct = maxDow > 0 ? (c / maxDow) * 100 : 0;
+        html += `<div class="bar-row"><div class="bar-label">${d}</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:#000"></div></div><div class="bar-value">${c}</div></div>`;
+      });
+      html += `</div>`;
+
+      document.getElementById("screen-stats").innerHTML = html;
+    }
+
+    // ─── Render: Settings ───
+    function renderSettings() {
+      const count = Object.keys(entries).length;
+      const streak = getStreak();
+      document.getElementById("screen-settings").innerHTML = `
+        <div class="page-title">Instellingen</div>
+        <div class="settings-card">
+          <div class="card-label">Backup email</div>
+          <input type="email" id="emailInput" value="${backupEmail}" placeholder="je@email.nl" />
+          <button class="save-email-btn" onclick="saveEmail()">Opslaan</button>
+        </div>
+        <div class="settings-card">
+          <div class="card-title">Statistieken</div>
+          <div class="card-text">${count} notities · ${streak > 0 ? "🔥 " + streak + " dagen streak" : "Nog geen streak"}</div>
+        </div>
+        <button class="export-btn" onclick="doExport('csv')">Exporteer als CSV</button>
+        <button class="export-btn" onclick="doExport('json')">Exporteer als JSON</button>
+        <div class="settings-card">
+          <div class="card-label">Over</div>
+          <div class="card-small">Spraakherkenning staat ingesteld op Nederlands (nl-NL). Data wordt lokaal opgeslagen op dit apparaat via IndexedDB.</div>
+        </div>
+        <button class="delete-btn" onclick="clearAll()">Alles verwijderen</button>
+      `;
+    }
+
+    // ─── Actions ───
+    window.setMood = (i) => { mood = i; renderToday(); };
+    window.setGratitude = (i, v) => { gratitude[i] = v; };
+    window.prevDay = () => { const d = new Date(editingDate); d.setDate(d.getDate()-1); loadDate(d); };
+    window.nextDay = () => { const d = new Date(editingDate); d.setDate(d.getDate()+1); if (d <= new Date()) loadDate(d); };
+    window.goToday = () => loadDate(new Date());
+    window.saveEmail = () => { backupEmail = document.getElementById("emailInput").value.trim(); localStorage.setItem("blessed-email", backupEmail); showToast("Email opgeslagen"); };
+
+    window.saveEntry = async () => {
+      const key = toKey(editingDate);
+      const data = { date: key, mood, gratitude: [...gratitude], onMind, updatedAt: new Date().toISOString() };
+      try { await dbSet(key, data); entries[key] = data; showToast("Opgeslagen ✓"); renderToday(); }
+      catch(e) { showToast("Opslaan mislukt"); }
+    };
+
+    window.saveAndBackup = async () => {
+      await saveEntry();
+      setTimeout(() => sendBackup(), 300);
+    };
+
+    window.selectCalDay = (y, m, d) => { const date = new Date(y, m, d); if (selectedDay && sameDay(date, selectedDay)) selectedDay = null; else selectedDay = date; renderCalendar(); };
+    window.editDay = (y, m, d) => { loadDate(new Date(y, m, d)); switchTab("today"); };
+    window.calPrev = () => { if (calMonth === 0) { calMonth = 11; calYear--; } else calMonth--; selectedDay = null; renderCalendar(); };
+    window.calNext = () => { if (calMonth === 11) { calMonth = 0; calYear++; } else calMonth++; selectedDay = null; renderCalendar(); };
+
+    window.doExport = (fmt) => {
+      const sorted = Object.keys(entries).sort();
+      let content, filename, type;
+      if (fmt === "csv") {
+        const rows = [["date","mood","mood_label","on_mind","grateful_1","grateful_2","grateful_3"]];
+        sorted.forEach(k => { const e = entries[k]; rows.push([e.date, e.mood, MOODS[e.mood]?.label||"", `"${(e.onMind||"").replace(/"/g,'""')}"`, `"${(e.gratitude[0]||"").replace(/"/g,'""')}"`, `"${(e.gratitude[1]||"").replace(/"/g,'""')}"`, `"${(e.gratitude[2]||"").replace(/"/g,'""')}"`]); });
+        content = rows.map(r => r.join(",")).join("\n"); filename = "blessed-backup.csv"; type = "text/csv";
+      } else {
+        content = JSON.stringify(sorted.map(k => entries[k]), null, 2); filename = "blessed-backup.json"; type = "application/json";
+      }
+      const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([content], {type})); a.download = filename; a.click();
+      showToast(sorted.length + " notities geëxporteerd");
+    };
+
+    window.clearAll = async () => {
+      if (!confirm("Alle notities verwijderen? Dit kan niet ongedaan worden.")) return;
+      try { await dbClear(); entries = {}; mood = null; gratitude = ["","",""]; onMind = ""; showToast("Alles verwijderd"); renderToday(); }
+      catch(e) { showToast("Verwijderen mislukt"); }
+    };
+
+    function loadDate(d) {
+      editingDate = d;
+      const entry = entries[toKey(d)];
+      if (entry) { mood = entry.mood; gratitude = [...entry.gratitude]; onMind = entry.onMind || ""; }
+      else { mood = null; gratitude = ["","",""]; onMind = ""; }
+      renderToday();
+    }
+
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+      document.getElementById("screen-" + tab).classList.add("active");
+      document.querySelectorAll(".nav button").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+      if (tab === "today") loadDate(editingDate);
+      if (tab === "calendar") renderCalendar();
+      if (tab === "stats") renderStats();
+      if (tab === "settings") renderSettings();
+    }
+
+    document.querySelectorAll(".nav button").forEach(b => b.addEventListener("click", () => switchTab(b.dataset.tab)));
+
+    // ─── Init ───
+    (async () => {
+      try { entries = await dbGetAll(); } catch(e) { console.error(e); }
+      const todayEntry = entries[toKey(new Date())];
+      if (todayEntry) { mood = todayEntry.mood; gratitude = [...todayEntry.gratitude]; onMind = todayEntry.onMind || ""; }
+      renderToday();
+    })();
+
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+  </script>
+</body>
+</html>
