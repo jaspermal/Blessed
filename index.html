@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Blessed">
+  <meta name="theme-color" content="#B0D4DE">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <title>Blessed</title>
+  <style>
+    :root {
+      --glacier: #B0D4DE;
+      --glacier-light: #D8EBF0;
+      --glacier-pale: #EDF5F8;
+      --cacao: #4F3727;
+      --cacao-light: #7A5E4A;
+      --cacao-pale: #A8907A;
+      --eggshell: #F5F0EB;
+      --eggshell-dark: #E8DFD6;
+      --white: #FFFFFE;
+      --text: #3B2A1D;
+      --text-light: #8B7B6B;
+      --text-lighter: #B5A898;
+      --danger: #C0392B;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { font-family: -apple-system, 'SF Pro Display', system-ui, sans-serif; background: var(--eggshell); color: var(--text); overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
+    textarea, input { -webkit-user-select: text; user-select: text; }
+    .app { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+    .content { flex: 1; overflow-y: auto; padding-bottom: 90px; }
+    .screen { display: none; padding: 0 20px; padding-top: max(32px, env(safe-area-inset-top)); max-width: 480px; margin: 0 auto; width: 100%; }
+    .screen.active { display: block; }
+
+    /* Nav */
+    .nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; border-top: 1px solid var(--eggshell-dark); background: var(--white); padding-bottom: max(12px, env(safe-area-inset-bottom)); z-index: 40; }
+    .nav button { flex: 1; display: flex; flex-direction: column; align-items: center; padding-top: 10px; border: none; background: none; color: var(--text-lighter); font-size: 10px; font-weight: 600; font-family: inherit; transition: color 0.15s; }
+    .nav button.active { color: var(--cacao); }
+    .nav button svg { margin-bottom: 3px; }
+
+    /* Header */
+    .app-header { text-align: center; margin-bottom: 24px; }
+    .app-header .logo { font-size: 13px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: var(--cacao); margin-bottom: 4px; }
+
+    /* Date nav */
+    .date-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .date-nav h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; text-align: center; color: var(--cacao); }
+    .streak { font-size: 13px; color: var(--text-light); margin-top: 2px; }
+    .back-link { font-size: 12px; color: var(--glacier-light); text-decoration: underline; border: none; background: none; font-family: inherit; margin-top: 2px; color: var(--cacao-light); }
+    .arrow-btn { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 10px; border: 1px solid var(--eggshell-dark); background: var(--white); flex-shrink: 0; }
+    .arrow-btn:disabled { opacity: 0.3; }
+    .arrow-btn svg { stroke: var(--cacao); }
+
+    /* Sections */
+    .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-light); margin-bottom: 6px; }
+
+    /* Mood */
+    .mood-row { display: flex; justify-content: center; gap: 12px; padding: 12px 0 16px; }
+    .mood-btn { border: none; background: none; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: all 0.2s; font-family: inherit; padding: 8px; border-radius: 12px; }
+    .mood-btn span.emoji { font-size: 28px; transition: all 0.2s; }
+    .mood-btn.selected { background: var(--white); box-shadow: 0 2px 8px rgba(79,55,39,0.1); }
+    .mood-btn.selected span.emoji { font-size: 36px; }
+    .mood-btn.dimmed { opacity: 0.25; }
+    .mood-btn .mood-text { font-size: 11px; font-weight: 600; }
+
+    /* Cards */
+    .card { background: var(--white); border: 1px solid var(--eggshell-dark); border-radius: 14px; padding: 16px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(79,55,39,0.04); }
+    .card .card-inner { display: flex; align-items: flex-start; gap: 12px; }
+    .card .card-content { flex: 1; }
+    .card label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-light); display: block; }
+    .card textarea, .card input[type="text"] { width: 100%; margin-top: 6px; border: none; background: transparent; resize: none; outline: none; font-size: 16px; line-height: 1.5; font-family: inherit; color: var(--text); }
+    .card textarea::placeholder, .card input::placeholder { color: var(--text-lighter); }
+
+    /* Mic */
+    .mic-btn { width: 42px; height: 42px; border-radius: 50%; border: 1.5px solid var(--eggshell-dark); background: var(--eggshell); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 18px; position: relative; transition: all 0.15s; }
+    .mic-btn svg { stroke: var(--cacao-pale); }
+    .mic-btn.recording { border-color: var(--danger); background: #FDF2F2; }
+    .mic-btn.recording::before { content: ''; position: absolute; width: 26px; height: 26px; border-radius: 50%; background: rgba(192,57,43,0.25); animation: pulse 1.2s ease-out infinite; }
+    @keyframes pulse { 0% { transform: scale(0.8); opacity: 0.5; } 100% { transform: scale(1.5); opacity: 0; } }
+
+    /* Buttons */
+    .save-btn { width: 100%; padding: 15px; border-radius: 14px; border: none; font-size: 16px; font-weight: 700; font-family: inherit; margin-top: 12px; transition: all 0.15s; }
+    .save-btn.enabled { background: var(--cacao); color: var(--white); }
+    .save-btn.disabled { background: var(--eggshell-dark); color: var(--text-lighter); }
+    .backup-btn { width: 100%; padding: 13px; border-radius: 14px; border: 1.5px solid var(--eggshell-dark); background: var(--white); font-size: 14px; font-weight: 600; font-family: inherit; color: var(--text-light); margin-top: 8px; margin-bottom: 24px; transition: all 0.15s; }
+
+    /* Calendar */
+    .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .cal-header h2 { font-size: 18px; font-weight: 700; color: var(--cacao); }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+    .cal-day-label { text-align: center; font-size: 11px; font-weight: 700; color: var(--text-light); padding: 6px; }
+    .cal-day { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 0; border-radius: 10px; border: none; background: var(--white); font-size: 14px; font-weight: 500; font-family: inherit; color: var(--text); transition: all 0.15s; }
+    .cal-day.empty { background: none; }
+    .cal-day.today:not(.selected) { border: 2px solid var(--glacier); }
+    .cal-day.selected { background: var(--cacao) !important; color: var(--white) !important; }
+    .cal-day.future { color: var(--text-lighter); background: none; }
+    .cal-day .cal-emoji { font-size: 10px; margin-top: 1px; }
+
+    /* Day detail */
+    .day-detail { margin-top: 14px; background: var(--white); border: 1px solid var(--eggshell-dark); border-radius: 14px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(79,55,39,0.04); }
+    .detail-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .detail-left { display: flex; align-items: center; gap: 8px; }
+    .detail-left .emoji { font-size: 24px; }
+    .detail-left .date { font-size: 14px; font-weight: 600; color: var(--cacao); }
+    .edit-btn, .add-btn { font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--eggshell-dark); background: var(--eggshell); font-family: inherit; color: var(--cacao); }
+    .detail-item { display: flex; gap: 8px; margin-bottom: 6px; }
+    .detail-item .num { font-size: 12px; color: var(--text-light); margin-top: 2px; }
+    .detail-item .text { font-size: 14px; line-height: 1.5; }
+    .detail-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--eggshell-dark); }
+    .detail-section .sec-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-light); margin-bottom: 4px; }
+    .detail-section .sec-text { font-size: 14px; line-height: 1.5; }
+    .no-entry { text-align: center; color: var(--text-light); font-size: 14px; padding: 20px; }
+
+    /* Settings */
+    .page-title { font-size: 22px; font-weight: 700; color: var(--cacao); margin-bottom: 20px; }
+    .scard { background: var(--white); border: 1px solid var(--eggshell-dark); border-radius: 14px; padding: 20px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(79,55,39,0.04); }
+    .scard .sc-title { font-size: 14px; font-weight: 700; color: var(--cacao); margin-bottom: 4px; }
+    .scard .sc-text { font-size: 14px; color: var(--text-light); }
+    .scard .sc-small { font-size: 12px; color: var(--text-lighter); line-height: 1.5; }
+    .scard .sc-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-light); margin-bottom: 8px; }
+    .scard input[type="email"] { width: 100%; padding: 11px 14px; border: 1.5px solid var(--eggshell-dark); border-radius: 10px; font-size: 16px; font-family: inherit; outline: none; background: var(--eggshell); }
+    .scard input[type="email"]:focus { border-color: var(--glacier); }
+    .se-btn { margin-top: 10px; padding: 9px 18px; border-radius: 10px; border: none; background: var(--cacao); color: var(--white); font-size: 13px; font-weight: 600; font-family: inherit; }
+    .exp-btn { width: 100%; padding: 14px; border-radius: 14px; border: 1.5px solid var(--eggshell-dark); background: var(--white); font-size: 14px; font-weight: 700; font-family: inherit; color: var(--cacao); margin-bottom: 10px; }
+    .del-btn { width: 100%; padding: 14px; border-radius: 14px; border: 1.5px solid rgba(192,57,43,0.3); background: var(--white); font-size: 14px; font-weight: 700; font-family: inherit; color: var(--danger); margin-bottom: 24px; }
+    .file-input-wrap { margin-top: 10px; }
+    .file-input-wrap input[type="file"] { font-size: 14px; font-family: inherit; }
+
+    /* Stats */
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .stat-box { background: var(--white); border: 1px solid var(--eggshell-dark); border-radius: 14px; padding: 16px; box-shadow: 0 1px 3px rgba(79,55,39,0.04); }
+    .stat-box .sv { font-size: 26px; font-weight: 800; color: var(--cacao); }
+    .stat-box .sl { font-size: 12px; color: var(--text-light); margin-top: 2px; }
+    .stat-wide { grid-column: 1 / -1; }
+    .chart-card { background: var(--white); border: 1px solid var(--eggshell-dark); border-radius: 14px; padding: 20px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(79,55,39,0.04); }
+    .chart-card .ct { font-size: 14px; font-weight: 700; color: var(--cacao); margin-bottom: 14px; }
+    .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .bar-label { width: 28px; font-size: 12px; font-weight: 600; color: var(--text-light); text-align: right; flex-shrink: 0; }
+    .bar-track { flex: 1; height: 22px; background: var(--eggshell); border-radius: 6px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 6px; transition: width 0.4s; }
+    .bar-value { width: 32px; font-size: 12px; color: var(--text-light); flex-shrink: 0; }
+    .throwback { background: var(--glacier-pale); border: 1px solid var(--glacier-light); border-radius: 14px; padding: 20px; margin-bottom: 14px; }
+    .throwback .tb-title { font-size: 13px; font-weight: 700; color: var(--cacao); margin-bottom: 8px; }
+    .throwback .tb-emoji { font-size: 20px; margin-bottom: 6px; }
+    .throwback .tb-text { font-size: 14px; line-height: 1.5; color: var(--text); }
+    .throwback .tb-date { font-size: 12px; color: var(--text-light); margin-top: 6px; }
+    .milestone { display: inline-flex; align-items: center; gap: 6px; background: var(--glacier-pale); border: 1px solid var(--glacier-light); border-radius: 999px; padding: 6px 14px; font-size: 13px; font-weight: 600; color: var(--cacao); margin-right: 6px; margin-bottom: 6px; }
+    .consistency-ring { display: flex; align-items: center; justify-content: center; gap: 20px; }
+    .ring-text { text-align: center; }
+    .ring-text .ring-val { font-size: 28px; font-weight: 800; color: var(--cacao); }
+    .ring-text .ring-label { font-size: 12px; color: var(--text-light); }
+
+    /* Toast */
+    .toast { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); background: var(--cacao); color: var(--white); font-size: 14px; padding: 10px 18px; border-radius: 999px; z-index: 50; animation: fadeUp 0.2s ease; white-space: nowrap; }
+    @keyframes fadeUp { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="content">
+      <div id="screen-today" class="screen active"></div>
+      <div id="screen-calendar" class="screen"></div>
+      <div id="screen-stats" class="screen"></div>
+      <div id="screen-settings" class="screen"></div>
+    </div>
+    <div class="nav">
+      <button class="active" data-tab="today">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        Vandaag
+      </button>
+      <button data-tab="calendar">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Kalender
+      </button>
+      <button data-tab="stats">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12c0 5-4 9-9 9s-9-4-9-9 4-9 9-9"/><path d="M21 3l-9 9"/></svg>
+        Inzichten
+      </button>
+      <button data-tab="settings">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        Instellingen
+      </button>
+    </div>
+  </div>
+  <div id="toast" class="toast" style="display:none"></div>
+
+  <script>
+    const MOODS = [
+      { emoji: "😢", label: "Slecht", color: "#C0392B", bg: "#FAEAE8" },
+      { emoji: "😕", label: "Meh", color: "#D4893F", bg: "#FDF2E5" },
+      { emoji: "😐", label: "Oké", color: "#C9B458", bg: "#FCF8E8" },
+      { emoji: "😊", label: "Goed", color: "#7BAE5E", bg: "#EEF6E8" },
+      { emoji: "😄", label: "Top", color: "#4A9E6B", bg: "#E8F5ED" },
+    ];
+    const DAY_L = ["Ma","Di","Wo","Do","Vr","Za","Zo"];
+    const MO = ["Januari","Februari","Maart","April","Mei","Juni","Juli","Augustus","September","Oktober","November","December"];
+    const WD = ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"];
+    const MILESTONES = [{n:7,t:"Eerste week!"},{n:14,t:"2 weken!"},{n:30,t:"Eén maand!"},{n:50,t:"50 entries!"},{n:100,t:"💯 Honderd!"},{n:200,t:"200! Held."},{n:365,t:"Een heel jaar!"}];
+
+    let entries={}, editingDate=new Date(), mood=null, gratitude=["","",""], onMind="", calYear=new Date().getFullYear(), calMonth=new Date().getMonth(), selectedDay=null, currentTab="today";
+    let backupEmail = localStorage.getItem("blessed-email")||"";
+
+    // DB
+    const DB="blessed-journal",ST="entries";
+    function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(ST))r.result.createObjectStore(ST);};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);})}
+    async function dbSet(k,v){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(ST,"readwrite");tx.objectStore(ST).put(v,k);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);})}
+    async function dbGetAll(){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(ST,"readonly");const s=tx.objectStore(ST);const keys=s.getAllKeys();const vals=s.getAll();tx.oncomplete=()=>{const r={};keys.result.forEach((k,i)=>r[k]=vals.result[i]);res(r);};tx.onerror=()=>rej(tx.error);})}
+    async function dbClear(){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(ST,"readwrite");tx.objectStore(ST).clear();tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error);})}
+
+    // Helpers
+    function toKey(d){return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
+    function fmtDate(d){return`${WD[d.getDay()]}, ${d.getDate()} ${MO[d.getMonth()]}`}
+    function sameDay(a,b){return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate()}
+    function isToday(){return sameDay(editingDate,new Date())}
+    function getStreak(){let s=0,d=new Date();if(!entries[toKey(d)])d.setDate(d.getDate()-1);while(entries[toKey(d)]){s++;d.setDate(d.getDate()-1);}return s}
+    function getLongest(){const sorted=Object.keys(entries).sort();if(!sorted.length)return 0;let max=1,cur=1;for(let i=1;i<sorted.length;i++){const p=new Date(sorted[i-1]+"T00:00:00"),n=new Date(sorted[i]+"T00:00:00");if((n-p)/864e5===1){cur++;if(cur>max)max=cur;}else cur=1;}return max}
+    function showToast(msg){const t=document.getElementById("toast");t.textContent=msg;t.style.display="block";clearTimeout(t._tid);t._tid=setTimeout(()=>t.style.display="none",2500)}
+
+    // Speech
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    let aRec=null,aField=null;
+    function toggleSpeech(field){
+      if(aRec&&aField===field){aRec.stop();aRec=null;aField=null;renderToday();return}
+      if(aRec){aRec.stop();aRec=null}
+      if(!SR){showToast("Spraakherkenning niet beschikbaar");return}
+      try{const r=new SR();r.continuous=false;r.interimResults=false;r.lang="nl-NL";
+        r.onresult=(e)=>{const t=e.results[0][0].transcript;if(field==="mind")onMind=onMind?onMind+" "+t:t;else gratitude[field]=gratitude[field]?gratitude[field]+" "+t:t;aRec=null;aField=null;renderToday()};
+        r.onerror=(e)=>{aRec=null;aField=null;if(e.error==="not-allowed")showToast("Microfoon toegang geweigerd");else if(e.error==="no-speech")showToast("Geen spraak gedetecteerd");renderToday()};
+        r.onend=()=>{if(aRec){aRec=null;aField=null;renderToday()}};
+        r.start();aRec=r;aField=field;renderToday();
+      }catch(e){showToast("Spraakherkenning niet beschikbaar")}
+    }
+    function micH(field){const isR=aField===field;return`<button class="mic-btn ${isR?"recording":""}" onclick="toggleSpeech(${typeof field==='string'?"'"+field+"'":field})">${isR?`<svg width="16" height="16" viewBox="0 0 24 24" fill="#C0392B"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`:`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--cacao-pale)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`}</button>`}
+
+    // Backup
+    function sendBackup(){if(!backupEmail){showToast("Stel eerst je email in bij Instellingen");return}const sorted=Object.keys(entries).sort();let body="Blessed Journal Backup\n\n";sorted.forEach(k=>{const e=entries[k];body+=`${e.date} — ${MOODS[e.mood]?.emoji||"?"}\n`;if(e.onMind)body+=`Bezig met: ${e.onMind}\n`;e.gratitude.forEach((g,i)=>{if(g)body+=`  ${i+1}. ${g}\n`});body+="\n"});const subject=`Blessed Backup — ${new Date().toLocaleDateString("nl-NL")}`;window.location.href=`mailto:${backupEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;showToast("Mail app geopend")}
+
+    // Import
+    window.importBackup=function(){document.getElementById("fileInput").click()}
+    window.handleImport=async function(e){
+      const file=e.target.files[0];if(!file)return;
+      try{const text=await file.text();const data=JSON.parse(text);
+        let count=0;
+        for(const entry of data){if(entry.date&&entry.gratitude){await dbSet(entry.date,entry);entries[entry.date]=entry;count++}}
+        showToast(`${count} notities geïmporteerd`);renderSettings();
+      }catch(err){showToast("Import mislukt — ongeldig bestand")}
+    }
+
+    // ─── RENDER: TODAY ───
+    function renderToday(){
+      const streak=getStreak(),today=isToday(),hasContent=mood!==null||gratitude.some(g=>g.trim())||onMind.trim(),existing=entries[toKey(editingDate)];
+      let h=`<div class="app-header"><div class="logo">✦ Blessed</div></div>`;
+      h+=`<div class="date-nav"><button class="arrow-btn" onclick="prevDay()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg></button><div style="text-align:center"><h1>${fmtDate(editingDate)}</h1>${today&&streak>0?`<div class="streak">🔥 ${streak} dagen streak</div>`:""}${!today?`<button class="back-link" onclick="goToday()">Terug naar vandaag</button>`:""}</div><button class="arrow-btn" onclick="nextDay()" ${today?"disabled":""}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg></button></div>`;
+
+      h+=`<div class="section-label">Hoe voel je je?</div><div class="mood-row">`;
+      MOODS.forEach((m,i)=>{const sel=mood===i,dim=mood!==null&&!sel;h+=`<button class="mood-btn ${sel?"selected":""} ${dim?"dimmed":""}" onclick="setMood(${i})"><span class="emoji">${m.emoji}</span>${sel?`<span class="mood-text" style="color:${m.color}">${m.label}</span>`:""}</button>`});
+      h+=`</div>`;
+
+      h+=`<div class="card"><div class="card-inner"><div class="card-content"><label>Wat houdt je bezig?</label><textarea rows="2" placeholder="Wat speelt er vandaag?" oninput="onMind=this.value">${onMind||""}</textarea></div>${micH("mind")}</div></div>`;
+      h+=`<div class="section-label" style="margin-top:6px;margin-bottom:8px">Dankbaarheid</div>`;
+      for(let i=0;i<3;i++)h+=`<div class="card"><div class="card-inner"><div class="card-content"><label>Dankbaar voor #${i+1}</label><textarea rows="2" placeholder="Waar ben je dankbaar voor?" oninput="setGratitude(${i},this.value)">${gratitude[i]||""}</textarea></div>${micH(i)}</div></div>`;
+      h+=`<button class="save-btn ${hasContent?"enabled":"disabled"}" onclick="saveEntry()" ${hasContent?"":"disabled"}>${existing?"Bijwerken":"Opslaan"}</button>`;
+      h+=`<button class="backup-btn" onclick="saveAndBackup()">💾 Opslaan & backup versturen</button>`;
+      document.getElementById("screen-today").innerHTML=h;
+    }
+
+    // ─── RENDER: CALENDAR ───
+    function renderCalendar(){
+      const first=new Date(calYear,calMonth,1);let startDow=first.getDay()-1;if(startDow<0)startDow=6;const dim=new Date(calYear,calMonth+1,0).getDate(),today=new Date();
+      let h=`<div class="app-header"><div class="logo">✦ Blessed</div></div>`;
+      h+=`<div class="cal-header"><button class="arrow-btn" onclick="calPrev()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg></button><h2>${MO[calMonth]} ${calYear}</h2><button class="arrow-btn" onclick="calNext()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg></button></div><div class="cal-grid">`;
+      DAY_L.forEach(d=>h+=`<div class="cal-day-label">${d}</div>`);
+      for(let i=0;i<startDow;i++)h+=`<div class="cal-day empty"></div>`;
+      for(let d=1;d<=dim;d++){const date=new Date(calYear,calMonth,d),key=toKey(date),entry=entries[key],isTod=sameDay(date,today),isSel=selectedDay&&sameDay(date,selectedDay),isFut=date>today;
+        const bg=entry&&!isSel?MOODS[entry.mood]?.bg||"":"";const cls=`cal-day ${isTod?"today":""} ${isSel?"selected":""} ${isFut?"future":""}`;
+        h+=`<button class="${cls}" style="${bg&&!isSel?"background:"+bg:""}" onclick="selectCalDay(${calYear},${calMonth},${d})" ${isFut?"disabled":""}>${d}${entry&&!isSel?`<span class="cal-emoji">${MOODS[entry.mood]?.emoji||""}</span>`:""}</button>`}
+      h+=`</div>`;
+      if(selectedDay){const key=toKey(selectedDay),entry=entries[key];
+        if(entry){h+=`<div class="day-detail"><div class="detail-header"><div class="detail-left"><span class="emoji">${MOODS[entry.mood]?.emoji||""}</span><span class="date">${fmtDate(selectedDay)}</span></div><button class="edit-btn" onclick="editDay(${selectedDay.getFullYear()},${selectedDay.getMonth()},${selectedDay.getDate()})">Bewerken</button></div>`;
+          if(entry.onMind)h+=`<div class="detail-section"><div class="sec-title">Bezig met</div><div class="sec-text">${entry.onMind}</div></div>`;
+          h+=`<div class="detail-section"><div class="sec-title">Dankbaar voor</div>`;entry.gratitude.forEach((g,i)=>h+=`<div class="detail-item"><span class="num">${i+1}.</span><span class="text">${g||'<span style="color:var(--text-lighter)">—</span>'}</span></div>`);h+=`</div></div>`}
+        else h+=`<div class="day-detail"><div class="no-entry">Geen notitie<br><button class="add-btn" onclick="editDay(${selectedDay.getFullYear()},${selectedDay.getMonth()},${selectedDay.getDate()})">+ Toevoegen</button></div></div>`}
+      document.getElementById("screen-calendar").innerHTML=h;
+    }
+
+    // ─── RENDER: STATS ───
+    function renderStats(){
+      const all=Object.values(entries),count=all.length;
+      let h=`<div class="app-header"><div class="logo">✦ Blessed</div></div><div class="page-title">Inzichten</div>`;
+      if(count===0){h+=`<div class="no-entry" style="padding:40px 0">Nog geen data.<br>Begin met je eerste notitie!</div>`;document.getElementById("screen-stats").innerHTML=h;return}
+
+      // Consistency (last 30 days)
+      let last30=0;for(let i=0;i<30;i++){const d=new Date();d.setDate(d.getDate()-i);if(entries[toKey(d)])last30++}
+      const pct=Math.round(last30/30*100);
+
+      // Avg mood
+      const avgMood=(all.reduce((s,e)=>s+(e.mood||0),0)/count);
+
+      h+=`<div class="stat-grid">`;
+      // Consistency ring
+      h+=`<div class="stat-box stat-wide"><div class="consistency-ring"><svg width="80" height="80" viewBox="0 0 80 80">
+        <circle cx="40" cy="40" r="34" fill="none" stroke="var(--eggshell-dark)" stroke-width="7"/>
+        <circle cx="40" cy="40" r="34" fill="none" stroke="var(--glacier)" stroke-width="7" stroke-linecap="round" stroke-dasharray="${pct*2.136} 213.6" transform="rotate(-90 40 40)"/>
+        </svg><div class="ring-text"><div class="ring-val">${last30}/30</div><div class="ring-label">dagen ingevuld<br>afgelopen maand</div></div></div></div>`;
+      h+=`<div class="stat-box"><div class="sv">${count}</div><div class="sl">Totaal notities</div></div>`;
+      h+=`<div class="stat-box"><div class="sv">${MOODS[Math.round(avgMood)]?.emoji||"😐"}</div><div class="sl">Gemiddelde mood</div></div>`;
+      h+=`</div>`;
+
+      // Milestones
+      const earned=MILESTONES.filter(m=>count>=m.n);
+      if(earned.length){h+=`<div class="chart-card"><div class="ct">Milestones</div>`;earned.forEach(m=>h+=`<span class="milestone">⭐ ${m.t}</span>`);
+        const next=MILESTONES.find(m=>count<m.n);if(next)h+=`<div style="font-size:12px;color:var(--text-light);margin-top:8px">Nog ${next.n-count} tot: ${next.t}</div>`;h+=`</div>`}
+
+      // Throwback
+      const oneMonthAgo=new Date();oneMonthAgo.setMonth(oneMonthAgo.getMonth()-1);const tbEntry=entries[toKey(oneMonthAgo)];
+      if(tbEntry){h+=`<div class="throwback"><div class="tb-title">✦ Een maand geleden</div><div class="tb-emoji">${MOODS[tbEntry.mood]?.emoji||""}</div>`;
+        tbEntry.gratitude.forEach(g=>{if(g)h+=`<div class="tb-text">• ${g}</div>`});if(tbEntry.onMind)h+=`<div class="tb-text" style="margin-top:6px;font-style:italic">"${tbEntry.onMind}"</div>`;
+        h+=`<div class="tb-date">${fmtDate(oneMonthAgo)}</div></div>`}
+
+      // Mood by weekday
+      const dowMood=[0,0,0,0,0,0,0],dowCount=[0,0,0,0,0,0,0];
+      all.forEach(e=>{if(e.mood!=null){const d=new Date(e.date+"T00:00:00").getDay();dowMood[d]+=e.mood;dowCount[d]++}});
+      h+=`<div class="chart-card"><div class="ct">Mood per weekdag</div>`;
+      DAY_L.forEach((d,i)=>{const di=(i+1)%7;const avg=dowCount[di]?dowMood[di]/dowCount[di]:0;const pct=(avg/4)*100;const color=MOODS[Math.round(avg)]?.color||"var(--eggshell-dark)";
+        h+=`<div class="bar-row"><div class="bar-label">${d}</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div><div class="bar-value">${dowCount[di]?MOODS[Math.round(avg)]?.emoji||"":"-"}</div></div>`});
+      h+=`</div>`;
+
+      // Monthly mood trend
+      const months={};all.forEach(e=>{if(e.mood!=null){const ym=e.date.substring(0,7);if(!months[ym])months[ym]={sum:0,count:0};months[ym].sum+=e.mood;months[ym].count++}});
+      const sortedMonths=Object.keys(months).sort();
+      if(sortedMonths.length>1){h+=`<div class="chart-card"><div class="ct">Mood per maand</div>`;
+        sortedMonths.forEach(ym=>{const avg=months[ym].sum/months[ym].count;const pct=(avg/4)*100;const color=MOODS[Math.round(avg)]?.color||"var(--eggshell-dark)";const parts=ym.split("-");const label=MO[parseInt(parts[1])-1].substring(0,3);
+          h+=`<div class="bar-row"><div class="bar-label">${label}</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div><div class="bar-value">${MOODS[Math.round(avg)]?.emoji||""}</div></div>`});
+        h+=`</div>`}
+
+      document.getElementById("screen-stats").innerHTML=h;
+    }
+
+    // ─── RENDER: SETTINGS ───
+    function renderSettings(){
+      const count=Object.keys(entries).length;
+      let h=`<div class="app-header"><div class="logo">✦ Blessed</div></div><div class="page-title">Instellingen</div>`;
+      h+=`<div class="scard"><div class="sc-label">Backup email</div><input type="email" id="emailInput" value="${backupEmail}" placeholder="je@email.nl"/><button class="se-btn" onclick="saveEmail()">Opslaan</button></div>`;
+      h+=`<div class="scard"><div class="sc-title">Backup herstellen</div><div class="sc-text" style="margin-bottom:8px">Upload een eerder geëxporteerde JSON backup om je data te herstellen.</div><button class="exp-btn" onclick="importBackup()">📂 Importeer JSON backup</button><input type="file" id="fileInput" accept=".json" style="display:none" onchange="handleImport(event)"/></div>`;
+      h+=`<div class="scard"><div class="sc-title">Data</div><div class="sc-text">${count} notities opgeslagen</div></div>`;
+      h+=`<button class="exp-btn" onclick="doExport('csv')">Exporteer als CSV</button>`;
+      h+=`<button class="exp-btn" onclick="doExport('json')">Exporteer als JSON</button>`;
+      h+=`<div class="scard"><div class="sc-label">Over</div><div class="sc-small">Blessed — dagelijks dankbaarheidsdagboek.<br>Spraakherkenning: Nederlands (nl-NL).<br>Data wordt lokaal opgeslagen via IndexedDB.</div></div>`;
+      h+=`<button class="del-btn" onclick="clearAll()">Alles verwijderen</button>`;
+      document.getElementById("screen-settings").innerHTML=h;
+    }
+
+    // ─── ACTIONS ───
+    window.setMood=(i)=>{mood=i;renderToday()};
+    window.setGratitude=(i,v)=>{gratitude[i]=v};
+    window.prevDay=()=>{const d=new Date(editingDate);d.setDate(d.getDate()-1);loadDate(d)};
+    window.nextDay=()=>{const d=new Date(editingDate);d.setDate(d.getDate()+1);if(d<=new Date())loadDate(d)};
+    window.goToday=()=>loadDate(new Date());
+    window.saveEmail=()=>{backupEmail=document.getElementById("emailInput").value.trim();localStorage.setItem("blessed-email",backupEmail);showToast("Email opgeslagen")};
+    window.saveEntry=async()=>{const key=toKey(editingDate),data={date:key,mood,gratitude:[...gratitude],onMind,updatedAt:new Date().toISOString()};try{await dbSet(key,data);entries[key]=data;showToast("Opgeslagen ✓");renderToday()}catch(e){showToast("Opslaan mislukt")}};
+    window.saveAndBackup=async()=>{await saveEntry();setTimeout(()=>sendBackup(),300)};
+    window.selectCalDay=(y,m,d)=>{const date=new Date(y,m,d);if(selectedDay&&sameDay(date,selectedDay))selectedDay=null;else selectedDay=date;renderCalendar()};
+    window.editDay=(y,m,d)=>{loadDate(new Date(y,m,d));switchTab("today")};
+    window.calPrev=()=>{if(calMonth===0){calMonth=11;calYear--}else calMonth--;selectedDay=null;renderCalendar()};
+    window.calNext=()=>{if(calMonth===11){calMonth=0;calYear++}else calMonth++;selectedDay=null;renderCalendar()};
+    window.doExport=(fmt)=>{const sorted=Object.keys(entries).sort();let content,filename,type;if(fmt==="csv"){const rows=[["date","mood","mood_label","on_mind","grateful_1","grateful_2","grateful_3"]];sorted.forEach(k=>{const e=entries[k];rows.push([e.date,e.mood,MOODS[e.mood]?.label||"",`"${(e.onMind||"").replace(/"/g,'""')}"`,`"${(e.gratitude[0]||"").replace(/"/g,'""')}"`,`"${(e.gratitude[1]||"").replace(/"/g,'""')}"`,`"${(e.gratitude[2]||"").replace(/"/g,'""')}"`])});content=rows.map(r=>r.join(",")).join("\n");filename="blessed-backup.csv";type="text/csv"}else{content=JSON.stringify(sorted.map(k=>entries[k]),null,2);filename="blessed-backup.json";type="application/json"}const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([content],{type}));a.download=filename;a.click();showToast(sorted.length+" notities geëxporteerd")};
+    window.clearAll=async()=>{if(!confirm("Alle notities verwijderen? Dit kan niet ongedaan worden."))return;try{await dbClear();entries={};mood=null;gratitude=["","",""];onMind="";showToast("Alles verwijderd");renderToday()}catch(e){showToast("Verwijderen mislukt")}};
+
+    function loadDate(d){editingDate=d;const entry=entries[toKey(d)];if(entry){mood=entry.mood;gratitude=[...entry.gratitude];onMind=entry.onMind||""}else{mood=null;gratitude=["","",""];onMind=""}renderToday()}
+    function switchTab(tab){currentTab=tab;document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));document.getElementById("screen-"+tab).classList.add("active");document.querySelectorAll(".nav button").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));if(tab==="today")loadDate(editingDate);if(tab==="calendar")renderCalendar();if(tab==="stats")renderStats();if(tab==="settings")renderSettings()}
+    document.querySelectorAll(".nav button").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.tab)));
+
+    (async()=>{try{entries=await dbGetAll()}catch(e){console.error(e)}const te=entries[toKey(new Date())];if(te){mood=te.mood;gratitude=[...te.gratitude];onMind=te.onMind||""}renderToday()})();
+    if("serviceWorker" in navigator)navigator.serviceWorker.register("/sw.js").catch(()=>{});
+  </script>
+</body>
+</html>
