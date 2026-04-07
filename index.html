@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Gratitude">
+  <meta name="theme-color" content="#FFFFFF">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <title>Gratitude Journal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; }
+    body { 
+      font-family: -apple-system, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
+      overscroll-behavior: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    textarea { -webkit-user-select: text; user-select: text; }
+    @keyframes fadeIn { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+    @keyframes pulse-ring { 0% { transform: scale(0.8); opacity: 0.5; } 100% { transform: scale(1.4); opacity: 0; } }
+    .toast-anim { animation: fadeIn 0.2s ease; }
+    .pulse-mic { animation: pulse-ring 1.2s ease-out infinite; }
+    /* Safe area padding for notch devices */
+    .safe-bottom { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
+    .safe-top { padding-top: max(2rem, env(safe-area-inset-top)); }
+  </style>
+</head>
+<body class="bg-white">
+  <div id="app"></div>
+
+  <script type="module">
+    import { h, render, useState, useEffect, useRef, useCallback } from 'https://esm.sh/preact@10.19.3/compat?exports=h,render,useState,useEffect,useRef,useCallback';
+    import htm from 'https://esm.sh/htm@3.1.1';
+
+    const html = htm.bind(h);
+
+    // ─── Constants ───
+
+    const MOODS = [
+      { emoji: "😢", label: "Awful", color: "#EF4444" },
+      { emoji: "😕", label: "Bad", color: "#F97316" },
+      { emoji: "😐", label: "Okay", color: "#EAB308" },
+      { emoji: "😊", label: "Good", color: "#84CC16" },
+      { emoji: "😄", label: "Great", color: "#22C55E" },
+    ];
+
+    const DAYS = ["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"];
+    const MONTHS = ["Januari","Februari","Maart","April","Mei","Juni","Juli","Augustus","September","Oktober","November","December"];
+    const WEEKDAYS = ["Zondag","Maandag","Dinsdag","Woensdag","Donderdag","Vrijdag","Zaterdag"];
+
+    // ─── Storage (IndexedDB wrapper) ───
+
+    const DB_NAME = "gratitude-journal";
+    const STORE_NAME = "entries";
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            db.createObjectStore(STORE_NAME);
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function dbGet(key) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, "readonly");
+        const req = tx.objectStore(STORE_NAME).get(key);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function dbSet(key, value) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, "readwrite");
+        tx.objectStore(STORE_NAME).put(value, key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    async function dbGetAll() {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, "readonly");
+        const store = tx.objectStore(STORE_NAME);
+        const keys = store.getAllKeys();
+        const values = store.getAll();
+        tx.oncomplete = () => {
+          const result = {};
+          keys.result.forEach((k, i) => { result[k] = values.result[i]; });
+          resolve(result);
+        };
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    async function dbClearAll() {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, "readwrite");
+        tx.objectStore(STORE_NAME).clear();
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    // ─── Helpers ───
+
+    const formatDate = (d) => `${WEEKDAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+
+    const toKey = (d) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    };
+
+    const isSameDay = (a, b) =>
+      a.getFullYear() === b.getFullYear() &&
+      a.getMonth() === b.getMonth() &&
+      a.getDate() === b.getDate();
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+
+    // ─── Components ───
+
+    function MoodSelector({ value, onChange }) {
+      return html`
+        <div class="flex justify-center gap-4 py-4">
+          ${MOODS.map((m, i) => html`
+            <button
+              key=${i}
+              onClick=${() => onChange(i)}
+              class="flex flex-col items-center gap-1 transition-all duration-200"
+              style=${{
+                transform: value === i ? "scale(1.35)" : "scale(1)",
+                opacity: value === null || value === i ? 1 : 0.3,
+              }}
+            >
+              <span class="text-3xl">${m.emoji}</span>
+              ${value === i && html`
+                <span class="text-xs font-semibold" style=${{ color: m.color }}>${m.label}</span>
+              `}
+            </button>
+          `)}
+        </div>
+      `;
+    }
+
+    function GratitudeField({ index, value, onChange, onToast }) {
+      const [isRecording, setIsRecording] = useState(false);
+      const recognitionRef = useRef(null);
+
+      const toggleRecording = useCallback(() => {
+        if (isRecording) {
+          if (recognitionRef.current) recognitionRef.current.stop();
+          setIsRecording(false);
+          return;
+        }
+
+        if (!SpeechRecognition) {
+          onToast("Speech niet beschikbaar op dit apparaat");
+          return;
+        }
+
+        try {
+          const recognition = new SpeechRecognition();
+          recognition.continuous = false;
+          recognition.interimResults = false;
+          recognition.lang = "nl-NL";
+
+          recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            onChange(value ? value + " " + transcript : transcript);
+            setIsRecording(false);
+          };
+          recognition.onerror = (e) => {
+            setIsRecording(false);
+            if (e.error === "not-allowed") onToast("Microfoon toegang geweigerd");
+            else if (e.error === "no-speech") onToast("Geen spraak gedetecteerd");
+          };
+          recognition.onend = () => setIsRecording(false);
+
+          recognitionRef.current = recognition;
+          recognition.start();
+          setIsRecording(true);
+        } catch (e) {
+          onToast("Speech niet beschikbaar");
+        }
+      }, [isRecording, value, onChange, onToast]);
+
+      return html`
+        <div class="rounded-xl border p-4" style=${{ backgroundColor: "#F9FAFB", borderColor: "#E5E7EB" }}>
+          <div class="flex items-start gap-3">
+            <div class="flex-1">
+              <label class="text-xs font-semibold tracking-wide uppercase" style=${{ color: "#6B7280" }}>
+                Dankbaar voor #${index + 1}
+              </label>
+              <textarea
+                value=${value || ""}
+                onInput=${(e) => onChange(e.target.value)}
+                placeholder="Waar ben je dankbaar voor?"
+                rows="2"
+                class="w-full mt-1.5 bg-transparent text-black placeholder-gray-300 resize-none outline-none text-base leading-relaxed"
+              />
+            </div>
+            <div class="mt-5">
+              <button
+                onClick=${toggleRecording}
+                class="flex items-center justify-center w-11 h-11 rounded-full border transition-all duration-200 flex-shrink-0"
+                style=${{
+                  borderColor: isRecording ? "#EF4444" : "#E5E7EB",
+                  backgroundColor: isRecording ? "#FEF2F2" : "#FFFFFF",
+                }}
+              >
+                ${isRecording ? html`
+                  <span class="relative flex items-center justify-center">
+                    <span class="absolute w-7 h-7 rounded-full bg-red-400 opacity-40 pulse-mic" />
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#EF4444">
+                      <rect x="6" y="6" width="12" height="12" rx="2" />
+                    </svg>
+                  </span>
+                ` : html`
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                    <line x1="8" y1="23" x2="16" y2="23" />
+                  </svg>
+                `}
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function CalendarGrid({ year, month, entries, selectedDay, onSelectDay }) {
+      const firstDay = new Date(year, month, 1);
+      let startDow = firstDay.getDay() - 1;
+      if (startDow < 0) startDow = 6;
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const today = new Date();
+
+      const cells = [];
+      for (let i = 0; i < startDow; i++) cells.push(null);
+      for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+      return html`
+        <div>
+          <div class="grid grid-cols-7 gap-1 mb-2">
+            ${DAYS.map((d) => html`
+              <div key=${d} class="text-center text-xs font-medium" style=${{ color: "#6B7280" }}>${d}</div>
+            `)}
+          </div>
+          <div class="grid grid-cols-7 gap-1">
+            ${cells.map((day, i) => {
+              if (day === null) return html`<div key="e${i}" />`;
+              const date = new Date(year, month, day);
+              const key = toKey(date);
+              const entry = entries[key];
+              const isToday = isSameDay(date, today);
+              const isSelected = selectedDay && isSameDay(date, selectedDay);
+              const isFuture = date > today;
+
+              return html`
+                <button
+                  key=${i}
+                  onClick=${() => !isFuture && onSelectDay(date)}
+                  disabled=${isFuture}
+                  class="relative flex flex-col items-center justify-center rounded-lg py-2.5 transition-all duration-150"
+                  style=${{
+                    backgroundColor: isSelected ? "#000" : isToday ? "#F9FAFB" : "transparent",
+                    color: isSelected ? "#FFF" : isFuture ? "#D1D5DB" : "#000",
+                    border: isToday && !isSelected ? "1px solid #E5E7EB" : "1px solid transparent",
+                  }}
+                >
+                  <span class="text-sm font-medium">${day}</span>
+                  ${entry && html`
+                    <span
+                      class="w-1.5 h-1.5 rounded-full mt-0.5"
+                      style=${{ backgroundColor: MOODS[entry.mood]?.color || "#6B7280" }}
+                    />
+                  `}
+                </button>
+              `;
+            })}
+          </div>
+        </div>
+      `;
+    }
+
+    function DayDetail({ date, entry, onEdit }) {
+      if (!entry) {
+        return html`
+          <div class="mt-4 rounded-xl border p-5 text-center" style=${{ backgroundColor: "#F9FAFB", borderColor: "#E5E7EB" }}>
+            <p class="text-sm" style=${{ color: "#6B7280" }}>Geen notitie voor deze dag</p>
+            <button
+              onClick=${onEdit}
+              class="mt-2 text-xs font-medium px-3 py-1.5 rounded-lg border"
+              style=${{ borderColor: "#E5E7EB", color: "#000" }}
+            >+ Toevoegen</button>
+          </div>
+        `;
+      }
+      return html`
+        <div class="mt-4 rounded-xl border p-5" style=${{ backgroundColor: "#F9FAFB", borderColor: "#E5E7EB" }}>
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="text-2xl">${MOODS[entry.mood]?.emoji}</span>
+              <span class="text-sm font-medium">${formatDate(date)}</span>
+            </div>
+            <button
+              onClick=${onEdit}
+              class="text-xs font-medium px-3 py-1.5 rounded-lg border"
+              style=${{ borderColor: "#E5E7EB", color: "#6B7280" }}
+            >Bewerken</button>
+          </div>
+          <div class="space-y-2">
+            ${entry.gratitude.map((g, i) => html`
+              <div key=${i} class="flex items-start gap-2">
+                <span class="text-xs mt-0.5" style=${{ color: "#6B7280" }}>${i + 1}.</span>
+                <p class="text-sm text-black leading-relaxed">${g || html`<span style=${{ color: "#D1D5DB" }}>—</span>`}</p>
+              </div>
+            `)}
+          </div>
+        </div>
+      `;
+    }
+
+    function Toast({ message, onDismiss }) {
+      useEffect(() => {
+        const t = setTimeout(onDismiss, 3000);
+        return () => clearTimeout(t);
+      }, []);
+
+      return html`
+        <div class="fixed bottom-24 left-1/2 -translate-x-1/2 bg-black text-white text-sm px-4 py-2.5 rounded-full shadow-lg z-50 toast-anim">
+          ${message}
+        </div>
+      `;
+    }
+
+    // ─── Main App ───
+
+    function App() {
+      const [tab, setTab] = useState("today");
+      const [entries, setEntries] = useState({});
+      const [loading, setLoading] = useState(true);
+      const [toast, setToast] = useState(null);
+
+      const [editingDate, setEditingDate] = useState(new Date());
+      const [mood, setMood] = useState(null);
+      const [gratitude, setGratitude] = useState(["", "", ""]);
+
+      const [calYear, setCalYear] = useState(new Date().getFullYear());
+      const [calMonth, setCalMonth] = useState(new Date().getMonth());
+      const [selectedDay, setSelectedDay] = useState(null);
+
+      // Load all entries
+      useEffect(() => {
+        (async () => {
+          try {
+            const all = await dbGetAll();
+            setEntries(all);
+            const todayKey = toKey(new Date());
+            if (all[todayKey]) {
+              setMood(all[todayKey].mood);
+              setGratitude(all[todayKey].gratitude || ["", "", ""]);
+            }
+          } catch (e) {
+            console.error("Load error:", e);
+          }
+          setLoading(false);
+        })();
+      }, []);
+
+      const getStreak = useCallback(() => {
+        let streak = 0;
+        const d = new Date();
+        if (!entries[toKey(d)]) d.setDate(d.getDate() - 1);
+        while (entries[toKey(d)]) {
+          streak++;
+          d.setDate(d.getDate() - 1);
+        }
+        return streak;
+      }, [entries]);
+
+      const loadEntryForDate = useCallback((date) => {
+        const key = toKey(date);
+        const entry = entries[key];
+        setEditingDate(date);
+        if (entry) {
+          setMood(entry.mood);
+          setGratitude(entry.gratitude || ["", "", ""]);
+        } else {
+          setMood(null);
+          setGratitude(["", "", ""]);
+        }
+        setTab("today");
+      }, [entries]);
+
+      const handleSave = async () => {
+        const key = toKey(editingDate);
+        const data = {
+          date: key,
+          mood,
+          gratitude,
+          updatedAt: new Date().toISOString(),
+        };
+        try {
+          await dbSet(key, data);
+          setEntries((prev) => ({ ...prev, [key]: data }));
+          setToast("Opgeslagen ✓");
+        } catch (e) {
+          setToast("Opslaan mislukt");
+        }
+      };
+
+      const handleExport = (format) => {
+        const sorted = Object.keys(entries).sort();
+        let content, filename, type;
+
+        if (format === "csv") {
+          const rows = [["date", "mood", "mood_label", "grateful_1", "grateful_2", "grateful_3"]];
+          sorted.forEach((k) => {
+            const e = entries[k];
+            rows.push([
+              e.date,
+              e.mood,
+              MOODS[e.mood]?.label || "",
+              '"' + (e.gratitude[0] || "").replace(/"/g, '""') + '"',
+              '"' + (e.gratitude[1] || "").replace(/"/g, '""') + '"',
+              '"' + (e.gratitude[2] || "").replace(/"/g, '""') + '"',
+            ]);
+          });
+          content = rows.map((r) => r.join(",")).join("\n");
+          filename = "gratitude-journal.csv";
+          type = "text/csv";
+        } else {
+          content = JSON.stringify(sorted.map((k) => entries[k]), null, 2);
+          filename = "gratitude-journal.json";
+          type = "application/json";
+        }
+
+        const blob = new Blob([content], { type });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        setToast(sorted.length + " notities geexporteerd");
+      };
+
+      const handleClearAll = async () => {
+        if (!confirm("Alle notities verwijderen? Dit kan niet ongedaan worden.")) return;
+        try {
+          await dbClearAll();
+          setEntries({});
+          setMood(null);
+          setGratitude(["", "", ""]);
+          setToast("Alles verwijderd");
+        } catch (e) {
+          setToast("Verwijderen mislukt");
+        }
+      };
+
+      const updateGratitude = (index, value) => {
+        setGratitude((prev) => {
+          const next = [...prev];
+          next[index] = value;
+          return next;
+        });
+      };
+
+      if (loading) {
+        return html`
+          <div class="flex items-center justify-center h-screen bg-white">
+            <div class="text-center">
+              <div class="text-3xl mb-2">🙏</div>
+              <p class="text-sm" style=${{ color: "#6B7280" }}>Laden...</p>
+            </div>
+          </div>
+        `;
+      }
+
+      const streak = getStreak();
+      const isToday = isSameDay(editingDate, new Date());
+      const hasContent = mood !== null || gratitude.some((g) => g.trim());
+
+      return html`
+        <div class="min-h-screen bg-white flex flex-col">
+          ${toast && html`<${Toast} message=${toast} onDismiss=${() => setToast(null)} />`}
+
+          <div class="flex-1 overflow-y-auto pb-24">
+
+            ${tab === "today" && html`
+              <div class="px-5 safe-top max-w-lg mx-auto">
+                <!-- Date nav -->
+                <div class="mb-6">
+                  <div class="flex items-center justify-between">
+                    <button
+                      onClick=${() => {
+                        const prev = new Date(editingDate);
+                        prev.setDate(prev.getDate() - 1);
+                        loadEntryForDate(prev);
+                      }}
+                      class="w-10 h-10 flex items-center justify-center rounded-lg border"
+                      style=${{ borderColor: "#E5E7EB" }}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+                    </button>
+                    <div class="text-center">
+                      <h1 class="text-lg font-bold tracking-tight text-black">
+                        ${formatDate(editingDate)}
+                      </h1>
+                      ${isToday && streak > 0 && html`
+                        <p class="text-sm mt-0.5" style=${{ color: "#6B7280" }}>🔥 ${streak} dagen streak</p>
+                      `}
+                      ${!isToday && html`
+                        <button
+                          onClick=${() => loadEntryForDate(new Date())}
+                          class="text-xs mt-0.5 underline"
+                          style=${{ color: "#6B7280" }}
+                        >Terug naar vandaag</button>
+                      `}
+                    </div>
+                    <button
+                      onClick=${() => {
+                        const next = new Date(editingDate);
+                        next.setDate(next.getDate() + 1);
+                        if (next <= new Date()) loadEntryForDate(next);
+                      }}
+                      class="w-10 h-10 flex items-center justify-center rounded-lg border"
+                      style=${{
+                        borderColor: "#E5E7EB",
+                        opacity: isToday ? 0.3 : 1,
+                      }}
+                      disabled=${isToday}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Mood -->
+                <div class="mb-6">
+                  <p class="text-xs font-semibold tracking-wide uppercase mb-1" style=${{ color: "#6B7280" }}>
+                    Hoe voel je je?
+                  </p>
+                  <${MoodSelector} value=${mood} onChange=${setMood} />
+                </div>
+
+                <!-- Gratitude fields -->
+                <div class="space-y-3 mb-8">
+                  ${[0, 1, 2].map((i) => html`
+                    <${GratitudeField}
+                      key=${i}
+                      index=${i}
+                      value=${gratitude[i]}
+                      onChange=${(v) => updateGratitude(i, v)}
+                      onToast=${(msg) => setToast(msg)}
+                    />
+                  `)}
+                </div>
+
+                <!-- Save -->
+                <button
+                  onClick=${handleSave}
+                  disabled=${!hasContent}
+                  class="w-full py-3.5 rounded-xl text-base font-semibold transition-all duration-200"
+                  style=${{
+                    backgroundColor: hasContent ? "#000" : "#E5E7EB",
+                    color: hasContent ? "#FFF" : "#9CA3AF",
+                  }}
+                >
+                  ${entries[toKey(editingDate)] ? "Bijwerken" : "Opslaan"}
+                </button>
+              </div>
+            `}
+
+            ${tab === "calendar" && html`
+              <div class="px-5 safe-top max-w-lg mx-auto">
+                <div class="flex items-center justify-between mb-6">
+                  <button
+                    onClick=${() => {
+                      if (calMonth === 0) { setCalMonth(11); setCalYear(calYear - 1); }
+                      else setCalMonth(calMonth - 1);
+                      setSelectedDay(null);
+                    }}
+                    class="w-10 h-10 flex items-center justify-center rounded-lg border"
+                    style=${{ borderColor: "#E5E7EB" }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+                  </button>
+                  <h2 class="text-lg font-bold tracking-tight">
+                    ${MONTHS[calMonth]} ${calYear}
+                  </h2>
+                  <button
+                    onClick=${() => {
+                      if (calMonth === 11) { setCalMonth(0); setCalYear(calYear + 1); }
+                      else setCalMonth(calMonth + 1);
+                      setSelectedDay(null);
+                    }}
+                    class="w-10 h-10 flex items-center justify-center rounded-lg border"
+                    style=${{ borderColor: "#E5E7EB" }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg>
+                  </button>
+                </div>
+
+                <${CalendarGrid}
+                  year=${calYear}
+                  month=${calMonth}
+                  entries=${entries}
+                  selectedDay=${selectedDay}
+                  onSelectDay=${(d) => setSelectedDay(
+                    selectedDay && isSameDay(d, selectedDay) ? null : d
+                  )}
+                />
+
+                ${selectedDay && html`
+                  <${DayDetail}
+                    date=${selectedDay}
+                    entry=${entries[toKey(selectedDay)]}
+                    onEdit=${() => loadEntryForDate(selectedDay)}
+                  />
+                `}
+              </div>
+            `}
+
+            ${tab === "settings" && html`
+              <div class="px-5 safe-top max-w-lg mx-auto">
+                <h2 class="text-2xl font-bold tracking-tight mb-6">Instellingen</h2>
+
+                <div class="rounded-xl border p-5 mb-4" style=${{ backgroundColor: "#F9FAFB", borderColor: "#E5E7EB" }}>
+                  <p class="text-sm font-semibold mb-1">Statistieken</p>
+                  <p class="text-sm" style=${{ color: "#6B7280" }}>
+                    ${Object.keys(entries).length} notities · ${streak > 0 ? "🔥 " + streak + " dagen streak" : "Nog geen streak"}
+                  </p>
+                </div>
+
+                <div class="space-y-3 mb-6">
+                  <button
+                    onClick=${() => handleExport("csv")}
+                    class="w-full py-3.5 rounded-xl text-sm font-semibold border transition-all"
+                    style=${{ borderColor: "#E5E7EB" }}
+                  >Exporteer als CSV</button>
+                  <button
+                    onClick=${() => handleExport("json")}
+                    class="w-full py-3.5 rounded-xl text-sm font-semibold border transition-all"
+                    style=${{ borderColor: "#E5E7EB" }}
+                  >Exporteer als JSON</button>
+                </div>
+
+                <div class="rounded-xl border p-5 mb-4" style=${{ backgroundColor: "#F9FAFB", borderColor: "#E5E7EB" }}>
+                  <p class="text-xs font-medium mb-2" style=${{ color: "#6B7280" }}>Over</p>
+                  <p class="text-xs leading-relaxed" style=${{ color: "#9CA3AF" }}>
+                    Spraakherkenning staat ingesteld op Nederlands. Data wordt lokaal opgeslagen in IndexedDB op dit apparaat.
+                  </p>
+                </div>
+
+                <button
+                  onClick=${handleClearAll}
+                  class="w-full py-3.5 rounded-xl text-sm font-semibold border transition-all"
+                  style=${{ borderColor: "#FECACA", color: "#EF4444" }}
+                >Alles verwijderen</button>
+              </div>
+            `}
+          </div>
+
+          <!-- Bottom Nav -->
+          <div
+            class="fixed bottom-0 left-0 right-0 flex border-t bg-white safe-bottom"
+            style=${{ borderColor: "#E5E7EB" }}
+          >
+            ${[
+              { id: "today", label: "Vandaag", icon: html`
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/>
+                </svg>
+              `},
+              { id: "calendar", label: "Kalender", icon: html`
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+              `},
+              { id: "settings", label: "Instellingen", icon: html`
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                </svg>
+              `},
+            ].map((t) => html`
+              <button
+                key=${t.id}
+                onClick=${() => {
+                  setTab(t.id);
+                  if (t.id === "today") loadEntryForDate(new Date());
+                }}
+                class="flex-1 flex flex-col items-center pt-3 pb-1 transition-all duration-150"
+                style=${{ color: tab === t.id ? "#000" : "#9CA3AF" }}
+              >
+                ${t.icon}
+                <span class="text-xs mt-1 font-medium">${t.label}</span>
+              </button>
+            `)}
+          </div>
+        </div>
+      `;
+    }
+
+    render(html`<${App} />`, document.getElementById("app"));
+
+    // Register service worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>
